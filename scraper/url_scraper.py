@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -16,6 +17,9 @@ from utils.constants import DEPTH_REQUEST_PARAM, JOB_ID_REQUEST_PARAM, URL_REQUE
 import utils.logging_config  # isort:skip
 
 logger = logging.getLogger(__name__)
+
+
+MAX_CONCURRENCY = 4
 
 
 class UrlScraper(threading.Thread):
@@ -56,6 +60,9 @@ class UrlScraper(threading.Thread):
             return []
 
     async def traverse_url(self, url: str, depth: int):
+        """
+        Traverses the given URL until we reach the given depth and build the internal URL tree
+        """
         # Validate that the input URL is valid
         host = self.url_sanitizer.get_hostname(url)
         if not host:
@@ -82,27 +89,36 @@ class UrlScraper(threading.Thread):
 
         return root.urls
 
+    def scrape_job(self, job_id: str, url: str, depth: int):
+        """
+        Create an asyc traverse task and wait for its completion
+        """
+        try:
+            loop = asyncio.new_event_loop()
+            scrape_results = loop.run_until_complete(self.traverse_url(url, depth))
+            logger.info(f"Parsing job {job_id} completed")
+
+            self.job_result_dal.put(job_id, JobSuccessResult(url, scrape_results))
+        except Exception:
+            logger.exception(f"Job {job_id} failed")
+            self.job_result_dal.put(job_id, JobFailedResult(url))
+        finally:
+            self.job_dal.remove_job(job_id)
+
     def run(self) -> None:
-        loop = asyncio.new_event_loop()
+        with ThreadPoolExecutor(max_workers=MAX_CONCURRENCY) as executor:
+            while True:
+                msg = self.in_queue.get(block=True)
+                url = msg[URL_REQUEST_PARAM]
+                job_id = msg[JOB_ID_REQUEST_PARAM]
+                depth = msg[DEPTH_REQUEST_PARAM]
 
-        while True:
-            msg = self.in_queue.get(block=True)
-            url = msg[URL_REQUEST_PARAM]
-            job_id = msg[JOB_ID_REQUEST_PARAM]
-            depth = msg[DEPTH_REQUEST_PARAM]
-
-            try:
-                self.job_dal.add_job(job_id)
-                logger.info("Starting job %s on %s", job_id, msg)
-
-                scrape_results = loop.run_until_complete(self.traverse_url(url, depth))
-                logger.info("Parsing job %s completed", job_id)
-
-                self.job_result_dal.put(job_id, JobSuccessResult(url, scrape_results))
-
-            except Exception:
-                logger.exception("Job %s failed", job_id)
-                self.job_result_dal.put(job_id, JobFailedResult(url))
-
-            finally:
-                self.job_dal.remove_job(job_id)
+                try:
+                    self.job_dal.add_job(job_id)
+                    logger.info(f"Starting job {job_id} on {msg}")
+                    executor.submit(self.scrape_job, url, depth)
+                except Exception:
+                    logger.exception(f"Job {job_id} failed")
+                    self.job_result_dal.put(job_id, JobFailedResult(url))
+                finally:
+                    self.job_dal.remove_job(job_id)

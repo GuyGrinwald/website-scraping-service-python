@@ -2,6 +2,9 @@ import logging
 import threading
 from functools import cache
 
+import asyncio
+import aiohttp
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -73,12 +76,12 @@ class UrlScraper(threading.Thread):
                         child = url_sanitizer.sanitize_url(host, child)
                         if child:
                             child_node = Node(child)
-                            current_node.children.append(child_node)
+                            current_node.urls.append(child_node)
                             stack.append((child_node, url_depth + 1))
                 except:
                     logger.exception(f"Unable to scrape URL: {url}")
 
-        return self.build_res_tree(root)
+        return root.urls
 
     def run(self) -> None:
         while True:

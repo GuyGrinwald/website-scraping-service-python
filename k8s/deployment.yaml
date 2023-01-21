@@ -1,0 +1,68 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: website-scraping-namespace
+  labels:
+    app: website-scraping
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: website-scraping-deployment
+  namespace: website-scraping-namespace
+  labels:
+    app: website-scraping
+spec:
+  replicas: 1 # this should be changed for non local environments
+  selector:
+    matchLabels:
+      app: website-scraping
+  template:
+    metadata:
+      labels:
+        app: website-scraping
+    spec:
+      containers:
+        - name: website-scraping
+          image: website-scraping
+          imagePullPolicy: Never # this is so we'll use our local image version
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: 1
+              memory: "128M"
+            limits:
+              cpu: 1
+              memory: "128M"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # env: - no env variables for now
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: website-scraping-service
+  namespace: website-scraping-namespace
+  labels:
+    app: website-scraping
+spec:
+  ports:
+  - port: 5000
+    protocol: TCP
+    targetPort: 5000
+  selector:
+    app: website-scraping
+  type: LoadBalancer

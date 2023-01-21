@@ -48,9 +48,7 @@ def create_scraping_job():
         return ir_response.data, ir_response.status
 
     job_id = uuid.uuid4().hex
-    logger.info(
-        "Creating new job %s for scraping request %s", job_id, url_request_data
-    )
+    logger.info("Creating new job %s for scraping request %s", job_id, url_request_data)
     url_request_data[JOB_ID_REQUEST_PARAM] = job_id
     url_mapper_queue.put(url_request_data)
 

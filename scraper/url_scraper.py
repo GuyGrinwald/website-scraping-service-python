@@ -33,7 +33,7 @@ class UrlScraper(threading.Thread):
 
     def run(self) -> None:
         while True:
-            msg = self.in_queue.get(block = True)
+            msg = self.in_queue.get(block=True)
             url = msg[URL_REQUEST_PARAM]
             job_id = msg[JOB_ID_REQUEST_PARAM]
             depth = msg[DEPTH_REQUEST_PARAM]

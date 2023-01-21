@@ -24,7 +24,7 @@ class JobCompletedSuccessfully(object):
 
     def __init__(self, job_id, url, scrape_results):
         self.job_id = job_id
-        self.results = {"url": url, "urls": scrape_results}
+        self.results = scrape_results
         self.data = {
             "job_id": self.job_id,
             "results": self.results,

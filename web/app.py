@@ -25,6 +25,10 @@ from web.response import (
     ParseResponse,
 )
 
+import utils.logging_config  # isort:skip
+
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 
 queue_manager = InMemoryAnaplanQueueManager()
@@ -35,16 +39,16 @@ job_db_factory = JobDBManager()
 @app.route("/api/v1/jobs", methods=["POST"])
 def create_scraping_job():
     url_request_data = request.get_json()
-    logging.info("Creating new url scraping request %s", url_request_data)
+    logger.info("Creating new url scraping request %s", url_request_data)
 
     # validate required params exist
     if not _validate_parse_request(url_request_data):
-        logging.warning("Request %s is invalid", url_request_data)
+        logger.warning("Request %s is invalid", url_request_data)
         ir_response = InvalidRequest()
         return ir_response.data, ir_response.status
 
     job_id = uuid.uuid4().hex
-    logging.info(
+    logger.info(
         "Creating new job %s for scraping request %s", job_id, url_request_data
     )
     url_request_data[JOB_ID_REQUEST_PARAM] = job_id
@@ -56,7 +60,7 @@ def create_scraping_job():
 
 @app.route("/api/v1/jobs/<job_id>", methods=["GET"])
 def job_status(job_id):
-    logging.info("Checking job %s status", job_id)
+    logger.info("Checking job %s status", job_id)
 
     url_dal = job_result_db_factory.get_dal()
     jobs_dal = job_db_factory.get_dal()
@@ -64,7 +68,7 @@ def job_status(job_id):
     job_results = url_dal.get(job_id)
 
     if job_results:
-        logging.info("Found scraping results for job %s", job_id)
+        logger.info("Found scraping results for job %s", job_id)
 
         # handle failures by translating the job result to an error response
         if isinstance(job_results, JobFailedResult):
@@ -78,11 +82,11 @@ def job_status(job_id):
         return jr_response.data, jr_response.status
 
     elif jobs_dal.job_in_progress(job_id):
-        logging.info("Job %s is still in progress", job_id)
+        logger.info("Job %s is still in progress", job_id)
         jip_response = JobInProgress(job_id)
         return jip_response.data, jip_response.status
 
-    logging.warning("Couldn't find job %s", job_id)
+    logger.warning("Couldn't find job %s", job_id)
     nf_response = NotFound(job_id)
     return nf_response.data, nf_response.status
 
@@ -123,7 +127,7 @@ if __name__ == "__main__":
     jobs_dal = job_db_factory.get_dal()
     job_results_dal = job_result_db_factory.get_dal()
 
-    logging.info("Starting UrlMapper worker")
+    logger.info("Starting UrlMapper worker")
     url_mapper = UrlScraper(url_mapper_queue, jobs_dal, job_results_dal)
     url_mapper.start()
 

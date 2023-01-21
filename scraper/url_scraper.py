@@ -9,6 +9,10 @@ from db.job_result import JobFailedResult, JobResultDB, JobSuccessResult
 from infra.AnaplanQueue import AnaplanQueue
 from utils.constants import DEPTH_REQUEST_PARAM, JOB_ID_REQUEST_PARAM, URL_REQUEST_PARAM
 
+import utils.logging_config  # isort:skip
+
+logger = logging.getLogger(__name__)
+
 
 class UrlScraper(threading.Thread):
     def __init__(
@@ -29,22 +33,22 @@ class UrlScraper(threading.Thread):
 
     def run(self) -> None:
         while True:
-            msg = self.in_queue.get()
+            msg = self.in_queue.get(block = True)
             url = msg[URL_REQUEST_PARAM]
             job_id = msg[JOB_ID_REQUEST_PARAM]
             depth = msg[DEPTH_REQUEST_PARAM]
 
             try:
                 self.job_dal.add_job(job_id)
-                logging.info("Starting job %s on %s", job_id, msg)
+                logger.info("Starting job %s on %s", job_id, msg)
 
                 scrape_results = self.scrape_url(url, depth)
-                logging.info("Parsing job %s completed", job_id)
+                logger.info("Parsing job %s completed", job_id)
 
                 self.job_result_dal.put(job_id, JobSuccessResult(url, scrape_results))
 
             except Exception:
-                logging.exception("Job %s failed", job_id)
+                logger.exception("Job %s failed", job_id)
                 self.job_result_dal.put(job_id, JobFailedResult(url))
 
             finally:

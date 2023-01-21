@@ -16,6 +16,7 @@ from utils.constants import (
 )
 from web.response import (
     GeneralError,
+    HealthCheckResponse,
     InvalidRequest,
     JobCompletedSuccessfully,
     JobFailed,
@@ -34,6 +35,13 @@ app = Flask(__name__)
 queue_manager = InMemoryAnaplanQueueManager()
 job_result_db_factory = JobResultDBManager()
 job_db_factory = JobDBManager()
+
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    logger.info("Recieved a health check")
+    hc_response = HealthCheckResponse()
+    return hc_response.data, hc_response.status
 
 
 @app.route("/api/v1/jobs", methods=["POST"])

@@ -31,21 +31,27 @@ spec:
             - containerPort: 5000
           resources:
             requests:
-              cpu: 1
-              memory: "128M"
+              cpu: 2
+              memory: "256M"
             limits:
-              cpu: 1
-              memory: "128M"
+              cpu: 2
+              memory: "256M"
           livenessProbe:
             httpGet:
               path: /health
               port: 5000
+              httpHeaders:
+              - name: Content-Type
+                value: application/json
             initialDelaySeconds: 3
             periodSeconds: 3
           readinessProbe:
             httpGet:
               path: /health
               port: 5000
+              httpHeaders:
+              - name: Content-Type
+                value: application/json
             initialDelaySeconds: 5
             periodSeconds: 10
           # env: - no env variables for now

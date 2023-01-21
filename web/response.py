@@ -1,3 +1,14 @@
+class HealthCheckResponse(object):
+    STATUS_MESSAGE = "Healthy"
+    status = 200
+
+    def __init__(self) -> None:
+        self.data = {
+            "status": HealthCheckResponse.status,
+            "message": HealthCheckResponse.STATUS_MESSAGE,
+        }
+
+
 class ParseResponse(object):
     STATUS_MESSAGE = "Job created"
     status = 200

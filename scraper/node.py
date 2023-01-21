@@ -10,5 +10,3 @@ class Node(dict):
 
     def __eq__(self, other):
         return (self.url, self.urls) == (other.url, other.urls)
-
-

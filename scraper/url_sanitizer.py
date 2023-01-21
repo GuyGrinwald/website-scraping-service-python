@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import utils.logging_config  # isort:skip
 
@@ -22,15 +22,19 @@ class URLSanitizer:
             if not result.scheme or not result.netloc:
                 res = hostname
                 if result.path:
-                    res = f"{res}/{result.path}"
+                    res = (
+                        f"{res}/{result.path}"
+                        if not result.path.startswith("/")
+                        else f"{res}{result.path}"
+                    )
                 if result.params:
                     res = f"{res};{result.params}"
                 if result.query:
                     res = f"{res}?{result.query}"
                 if result.fragment:
                     res = f"{res}?{result.fragment}"
-                return res
-            return url
+                return urljoin(res, ".")
+            return urljoin(url, ".")
         except:
             logger.warning(f"URL {url} is not valid")
             return None

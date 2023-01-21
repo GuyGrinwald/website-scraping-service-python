@@ -1,17 +1,15 @@
+import asyncio
 import logging
 import threading
-from functools import cache
 
-import asyncio
 import aiohttp
-
-import requests
 from bs4 import BeautifulSoup
 
 from db.job import JobDB
 from db.job_result import JobFailedResult, JobResultDB, JobSuccessResult
 from infra.AnaplanQueue import AnaplanQueue
 from scraper.node import Node
+from scraper.url_cache import URLCache
 from scraper.url_sanitizer import URLSanitizer
 from utils.constants import DEPTH_REQUEST_PARAM, JOB_ID_REQUEST_PARAM, URL_REQUEST_PARAM
 
@@ -28,62 +26,65 @@ class UrlScraper(threading.Thread):
         self.in_queue = in_queue
         self.job_dal = job_dal
         self.job_result_dal = job_result_dal
+        self.url_sanitizer = URLSanitizer()
+        self.url_cache = URLCache(URLCache.DEFAULT_CAPACITY)
 
-    @cache
-    def scrape_url(self, url: str):
+    async def scrape_url(self, url: str):
         """
         Attempts to scrape the given URL and return a list of children URLs, uses an in-memory cache for optimization
         """
         try:
-            req = requests.get(url, timeout=5)
-            soup = BeautifulSoup(req.content, "html.parser")
-            return [a.get("href", None) for a in soup.find_all("a", href=True)]
+            children = self.url_cache.get(url)
+
+            if children is not None:
+                return children
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    html = await response.read()
+                    soup = BeautifulSoup(html, "html.parser")
+                    children = [
+                        a.get("href", None) for a in soup.find_all("a", href=True)
+                    ]
+                    self.url_cache.put(url, children)
+                    return children
         except:
             logger.warning(f"Unable to scrape URL: {url}")
+            self.url_cache.put(
+                url, []
+            )  # cache bad result as well to minimize bad searches
             return []
 
-    def build_res_tree(self, root: Node) -> dict:
-        """
-        Recursively iterate over a Node tree and collect the URLs in it to a dictionary
-        """
-        res = {"url": root.url, "urls": []}
-
-        if not root.children:
-            return res
-
-        for child in root.children:
-            res["urls"].append(self.build_res_tree(child))
-
-        return res
-
-    def traverse_url(self, url: str, depth: int):
-        url_sanitizer = URLSanitizer()
-
+    async def traverse_url(self, url: str, depth: int):
         # Validate that the input URL is valid
-        host = url_sanitizer.get_hostname(url)
+        host = self.url_sanitizer.get_hostname(url)
         if not host:
             return {"url": url, "urls": []}
 
         root = Node(url)
-        stack = [(root, 0)]
+        task = asyncio.create_task(self.scrape_url(root.url))
+        stack = [(root, task, 0)]
 
         while stack:
-            current_node, url_depth = stack.pop()
-            if url_depth != depth:
+            current_node, scrape_task, node_depth = stack.pop()
+            if node_depth != depth:
                 try:
-                    children = self.scrape_url(current_node.url)
-                    for child in children:
-                        child = url_sanitizer.sanitize_url(host, child)
-                        if child:
-                            child_node = Node(child)
+                    child_urls = await scrape_task
+                    for child_url in child_urls:
+                        child_url = self.url_sanitizer.sanitize_url(host, child_url)
+                        if child_url:
+                            child_node = Node(child_url)
                             current_node.urls.append(child_node)
-                            stack.append((child_node, url_depth + 1))
+                            task = asyncio.create_task(self.scrape_url(child_url))
+                            stack.append((child_node, task, node_depth + 1))
                 except:
-                    logger.exception(f"Unable to scrape URL: {url}")
+                    logger.warning(f"Unable to process URL: {child_url}")
 
         return root.urls
 
     def run(self) -> None:
+        loop = asyncio.new_event_loop()
+
         while True:
             msg = self.in_queue.get(block=True)
             url = msg[URL_REQUEST_PARAM]
@@ -94,7 +95,7 @@ class UrlScraper(threading.Thread):
                 self.job_dal.add_job(job_id)
                 logger.info("Starting job %s on %s", job_id, msg)
 
-                scrape_results = self.traverse_url(url, depth)
+                scrape_results = loop.run_until_complete(self.traverse_url(url, depth))
                 logger.info("Parsing job %s completed", job_id)
 
                 self.job_result_dal.put(job_id, JobSuccessResult(url, scrape_results))

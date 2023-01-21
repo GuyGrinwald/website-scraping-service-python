@@ -1,0 +1,4 @@
+URL_MAPPER_QUEUE = "UrlMapperQueue"
+URL_REQUEST_PARAM = "url"
+DEPTH_REQUEST_PARAM = "depth"
+JOB_ID_REQUEST_PARAM = "job_id"

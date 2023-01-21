@@ -6,9 +6,8 @@ loglevel = "debug"
 
 worker_class = "gthread"
 
-workers = 1 # set this to 1 for easy debug purposes
+workers = 1  # set this to 1 for easy debug purposes
 
 threads = 2
 
 bind = "0.0.0.0:5000"
-
